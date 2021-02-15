@@ -10,7 +10,7 @@ struct Simplex {
     int dim;
 
     bool operator==(const Simplex &other) const {
-        if (vertices == vertices) {
+        if (vertices == other.vertices) {
             return 1;
         }
         return 0;
@@ -25,12 +25,10 @@ struct Simplex {
             os << curr.vertices[i] << " ";
         }
         os << "] – ";
-        os << curr.time << "\t";
+        os << curr.time;
         return os;
     }
 };
-
-const Simplex nullsimplex = Simplex{{}, 0, -1};
 
 struct Homology {
     size_t ind_birth;
@@ -85,11 +83,11 @@ public:
         return column[i];
     }
 
-    /*void print() {
+    void print() {
         for (size_t i = 0; i != column.size(); ++ i) {
             std::cout << column[i] << " ";
         }
-    }*/
+    }
 };
 
 class Matrix {
@@ -111,30 +109,10 @@ public:
     }
 
     void reduce(
-            const Simplex &to_ignore, 
             std::vector<Homology> &curr_dim_homologies, 
             const std::vector<Simplex> &simpleces,
             std::vector<int> &paired)
     {
-        std::vector<int> ignored(higher_inds.size(), 0);
-        if (to_ignore != nullsimplex) {
-            for (size_t i = 0; i != higher_inds.size(); ++i) {
-                if (std::includes(
-                    to_ignore.vertices.begin(), 
-                    to_ignore.vertices.end(),
-                    simpleces[higher_inds[i]].vertices.begin(), 
-                    simpleces[higher_inds[i]].vertices.end()
-                    ) ||
-                    std::includes(
-                    simpleces[higher_inds[i]].vertices.begin(),
-                    simpleces[higher_inds[i]].vertices.end(),
-                    to_ignore.vertices.begin(), 
-                    to_ignore.vertices.end()
-                    )) {
-                    ignored[i] = 1;
-                }
-            }
-        }
         for (size_t curr_reduced = sub_inds.size(); curr_reduced != 0; --curr_reduced) {
             /*std::cout << "curr_reduced" << curr_reduced << "\n";
             for (size_t i = 0; i != matrix.size(); ++ i) {
@@ -142,7 +120,7 @@ public:
                 std::cout << "\n";
             }*/
             size_t ind = 0;
-            while (ind < matrix.size() && (matrix[ind].lowest != curr_reduced || ignored[ind])) {
+            while (ind < matrix.size() && matrix[ind].lowest != curr_reduced) {
                 ++ind;
             }
             if (ind == matrix.size()) {
@@ -165,7 +143,59 @@ public:
             paired[higher_inds[ind]] = 1;
             ++ind;
             while (ind < matrix.size()) {
-                if (matrix[ind].lowest == curr_reduced && !ignored[ind]) {
+                if (matrix[ind].lowest == curr_reduced) {
+                    matrix[ind].reduce(reducer);
+                }
+                ++ind;
+            }
+        }
+    }
+
+    void reduce_link(
+            std::vector<Homology> &curr_dim_homologies, 
+            const std::vector<Simplex> &simpleces,
+            std::vector<int> &paired,
+            std::vector<int> &ignored)
+    {
+        for (size_t curr_reduced = sub_inds.size(); curr_reduced != 0; --curr_reduced) {
+            if (ignored[sub_inds[curr_reduced - 1]]) {
+                continue;
+            }
+            /*std::cout << "curr_reduced" << curr_reduced << "\n";
+            for (size_t i = 0; i != matrix.size(); ++ i) {
+                matrix[i].print();
+                std::cout << "\n";
+            }*/
+            size_t ind = 0;
+            while (ind < matrix.size() && 
+                (matrix[ind].lowest < curr_reduced || 
+                matrix[ind][curr_reduced - 1] == 0 || 
+                ignored[higher_inds[ind]])) 
+            {
+                ++ind;
+            }
+            if (ind == matrix.size()) {
+                continue;
+            }
+            Column &reducer = matrix[ind];
+            size_t bearer = sub_inds[curr_reduced - 1];
+            size_t murderer = higher_inds[ind];
+            double birth = simpleces[bearer].time;
+            double death = simpleces[murderer].time;
+            if (birth != death) {
+                curr_dim_homologies.push_back(Homology(
+                    bearer,
+                    murderer,
+                    simpleces[bearer].time, 
+                    simpleces[murderer].time
+                ));
+            }
+            paired[sub_inds[curr_reduced - 1]] = 1;
+            paired[higher_inds[ind]] = 1;
+            ignored[higher_inds[ind]] = 1;
+            ++ind;
+            while (ind < matrix.size()) {
+                if (matrix[ind].lowest == curr_reduced && !ignored[higher_inds[ind]]) {
                     matrix[ind].reduce(reducer);
                 }
                 ++ind;
@@ -198,12 +228,8 @@ public:
         ++sz;
     }
 
-    // finds persistent homologies
-    // possible takes link
-    // all simpleces which are its subsets 
-    // or which it is a subset of
-    // are ignored
-    std::vector<std::vector<Homology>> persistent_homologies(const Simplex &to_ignore = nullsimplex) {
+    // finds persistent homologies over Z2
+    std::vector<std::vector<Homology>> persistent_homologies() {
         std::vector<std::vector<Homology>> ans;
         if (dim == -1) {
             return ans;
@@ -214,9 +240,9 @@ public:
         int future_num = 8;
         for (int i = 0; i != future_num; ++i) {
             futures.push_back(std::async(
-                [i, future_num, this, &ans, &to_ignore, &paired] {
+                [i, future_num, this, &ans, &paired] {
                 for (size_t k = i; k < this->matrices.size() - 1; k += future_num) {
-                    this->matrices[k].reduce(to_ignore, ans[k], this->simpleces, paired);
+                    this->matrices[k].reduce(ans[k], this->simpleces, paired);
                 }
             }
             ));
@@ -230,7 +256,54 @@ public:
                 ans[simpleces[i].dim].emplace_back(i, i, simpleces[i].time, inf);
             }
         }
-/*        this->matrices[2].reduce(to_ignore, ans[2], this->simpleces, paired);*/
+        return ans;
+    }
+
+    // finds persistent homologies of link, which index is in to_ignore_ind,over Z2
+    std::vector<std::vector<Homology>> persistent_homologies_link(size_t to_ignore_ind) {
+        std::vector<std::vector<Homology>> ans;
+        if (dim == -1) {
+            return ans;
+        }
+        const Simplex &to_ignore = simpleces[to_ignore_ind];
+        ans.resize(dim - to_ignore.dim);
+        std::vector<int> paired(sz, 0);
+        std::vector<int> ignored(sz, 0);
+        for (size_t i = 0; i != sz; ++i) {
+            const Simplex &curr = simpleces[i];
+            if (!std::includes(
+                    curr.vertices.begin(), 
+                    curr.vertices.end(),
+                    to_ignore.vertices.begin(), 
+                    to_ignore.vertices.end()
+                    ) || i == to_ignore_ind) 
+            {
+                ignored[i] = 1;
+            }
+        }
+        std::vector<std::future<void>> futures;
+        int future_num = 8;
+        int margin = to_ignore.dim + 1;
+        for (int i = margin; i != margin + future_num; ++i) {
+            futures.push_back(std::async(
+                [i, future_num, this, &ans, &ignored, &paired, margin] {
+                for (size_t k = i; k < this->matrices.size() - 1; k += future_num) {
+                    this->matrices[k].reduce_link(ans[k - margin], 
+                        this->simpleces, paired, ignored);
+                }
+            }
+            ));
+        }
+        for (int i = 0; i != future_num; ++i) {
+            futures[i].get();
+        }
+        //this->matrices[2].reduce_link(ans[1], this->simpleces, paired, ignored);
+        double inf = std::numeric_limits<double>::infinity();
+        for (size_t i = 0; i != sz; ++i) {
+            if (!paired[i] && !ignored[i]) {
+                ans[simpleces[i].dim - margin].emplace_back(i, i, simpleces[i].time, inf);
+            }
+        }
         return ans;
     }
 
