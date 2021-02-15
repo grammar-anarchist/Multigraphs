@@ -24,7 +24,13 @@ int main() {
 	for (size_t i = 0; i != ans.size(); ++i) {
 		std::cout << "dim" << i << "\n";
 		for (size_t j = 0; j != ans[i].size(); ++j) {
-			std::cout << f[ans[i][j].ind_birth] << " " << f[ans[i][j].ind_death] << "\n";
+			std::cout << f[ans[i][j].ind_birth] << " ";
+			double inf = std::numeric_limits<double>::infinity();
+			if (ans[i][j].death != inf) {
+				std::cout << f[ans[i][j].ind_death] << "\n";
+			} else {
+				std::cout <<"immortal\n";
+			}
 		}
 	}
 	std::cout << "finished\n";

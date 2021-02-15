@@ -149,12 +149,18 @@ public:
                 continue;
             }
             Column &reducer = matrix[ind];
-            curr_dim_homologies.push_back(Homology(
-                sub_inds[curr_reduced - 1],
-                higher_inds[ind],
-                simpleces[sub_inds[curr_reduced - 1]].time, 
-                simpleces[higher_inds[ind]].time
-            ));
+            size_t bearer = sub_inds[curr_reduced - 1];
+            size_t murderer = higher_inds[ind];
+            double birth = simpleces[bearer].time;
+            double death = simpleces[murderer].time;
+            if (birth != death) {
+                curr_dim_homologies.push_back(Homology(
+                    bearer,
+                    murderer,
+                    simpleces[bearer].time, 
+                    simpleces[murderer].time
+                ));
+            }
             paired[sub_inds[curr_reduced - 1]] = 1;
             paired[higher_inds[ind]] = 1;
             ++ind;
@@ -202,7 +208,7 @@ public:
         if (dim == -1) {
             return ans;
         }
-        ans.resize(dim);
+        ans.resize(dim + 1);
         std::vector<int> paired(sz, 0);
         std::vector<std::future<void>> futures;
         int future_num = 8;
@@ -224,7 +230,7 @@ public:
                 ans[simpleces[i].dim].emplace_back(i, i, simpleces[i].time, inf);
             }
         }
-        /*this->matrices[2].reduce(to_ignore, ans[2], this->simpleces);*/
+/*        this->matrices[2].reduce(to_ignore, ans[2], this->simpleces, paired);*/
         return ans;
     }
 
