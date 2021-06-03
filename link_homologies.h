@@ -173,10 +173,16 @@ public:
             std::vector<std::vector<Homology>> &homologies,
             Simplex &curr,
             int prime = 2) {
+        int ignore_first = 1;
         for (int i = 0; i != vertices.size(); ++i) {
             if (vertices[i].pair == unpaired) {
-                auto res = Homology(vertices[i].time);
-                add_homology(res, homologies[correction], curr);
+                if (ignore_first) {
+                    ignore_first = 0;
+                }
+                else {
+                    auto res = Homology(vertices[i].time);
+                    add_homology(res, homologies[correction], curr);
+                }
             } else {
                 double vertex_time = vertices[i].time;
                 double edge_time = complex[0][vertices[i].pair].birth();

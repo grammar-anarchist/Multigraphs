@@ -133,23 +133,13 @@ public:
         for (size_t i = 1; i < complex.size(); ++i) {
             check_for_immortal(i);
         }
-        std::vector<Simplex*> for_future;
         for (auto &matrix : complex) {
             for (Simplex &simplex : matrix) {
                 int res = simplex.last_nmu();
                 if (res > 0) {
-                    for_future.push_back(&simplex);
+                    compute_link_homologies(simplex, graph, homologies, prime);
                 }
             }
-        }
-        std::vector<std::future<void>> futures;
-        unsigned threads = std::thread::hardware_concurrency();
-        for (unsigned i = 0; i != threads; ++i) {
-            futures.push_back(std::async([this, i, threads, &for_future, prime] {
-                for (unsigned int j = i; j < for_future.size(); j += threads) {
-                    compute_link_homologies(*for_future[j], graph, homologies, prime);
-                }
-            }));
         }
         return homologies;
     }
